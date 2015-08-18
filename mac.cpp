@@ -16,11 +16,14 @@ using namespace std;
 
 //Hold onto your seats, this here is code to make the pr2 do the macarena.
 
-//Currently working on moving the arms to the right positions.
-//Next job is making the robot spin, and then loop the motions.
-
-//Also the casters seem to be struggling to turn the robot for some reason.
+//The casters seem to be struggling to turn the robot for some reason.
 //Weird.
+
+//New goal before the e-fit tours: make the head move sometimes along with the dance
+//Makes the pr2 look more intelligent apparently
+//Although how intelligent can you even look while doing the macarena
+
+//Also fix some of those trajectories into a new function because wow
 
 typedef actionlib::SimpleActionClient< pr2_controllers_msgs::JointTrajectoryAction > TrajClient;
 
