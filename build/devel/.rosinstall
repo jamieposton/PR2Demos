@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/jposton/catkin_ws/src/dance/build/devel/setup.sh
