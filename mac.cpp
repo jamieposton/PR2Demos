@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <pr2_controllers_msgs/JointTrajectoryAction.h>
+#include <pr2_controllers_msgs/PointHeadAction.h>
 #include <actionlib/client/simple_action_client.h>
 using namespace std;
 
@@ -30,6 +31,9 @@ using namespace std;
 
 typedef actionlib::SimpleActionClient< pr2_controllers_msgs::JointTrajectoryAction > TrajClient;
 
+// Our Action interface type, provided as a typedef for convenience
+typedef actionlib::SimpleActionClient<pr2_controllers_msgs::PointHeadAction> PointHeadClient;
+
 class RobotDriver{
 	private:
 		//! The node handle we'll be using for the base
@@ -40,32 +44,72 @@ class RobotDriver{
 		//Action client for the joint trajectory action
 		//used to trigger the arm movement action
 		TrajClient* traj_client_;
-
 		TrajClient* traj_client_L;
+
+		PointHeadClient* point_head_client_;
+
 
 	public:
 		//! ROS node initialization
 		RobotDriver(ros::NodeHandle &nh){
-		  nh_ = nh;
-		  //set up the publisher for the cmd_vel topic
-		  cmd_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("/base_controller/command", 1);
+			nh_ = nh;
+			//set up the publisher for the cmd_vel topic
+			cmd_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("/base_controller/command", 1);
 
-		  // tell the action client that we want to spin a thread by default
-		  traj_client_ = new TrajClient("r_arm_controller/joint_trajectory_action", true);
-		  traj_client_L = new TrajClient("l_arm_controller/joint_trajectory_action", true);
+			//Initialize the client for the Action interface to the head controller
+			point_head_client_ = new PointHeadClient("/head_traj_controller/point_head_action", true);
 
-		  // wait for action server to come up
-		  while(!traj_client_->waitForServer(ros::Duration(5.0))){
-		    ROS_INFO("Waiting for the joint_trajectory_action server");
-		  }
-		  while(!traj_client_L->waitForServer(ros::Duration(5.0))){
-		    ROS_INFO("Waiting for the joint_trajectory_action server");
-		  }
+			// tell the action client that we want to spin a thread by default
+			traj_client_ = new TrajClient("r_arm_controller/joint_trajectory_action", true);
+			traj_client_L = new TrajClient("l_arm_controller/joint_trajectory_action", true);
+
+			// wait for action server to come up
+			while(!traj_client_->waitForServer(ros::Duration(5.0))){
+				ROS_INFO("Waiting for the joint_trajectory_action server");
+			}
+			while(!traj_client_L->waitForServer(ros::Duration(5.0))){
+				ROS_INFO("Waiting for the joint_trajectory_action server");
+			}
+
+			//wait for head controller action server to come up 
+			while(!point_head_client_->waitForServer(ros::Duration(5.0))){
+				ROS_INFO("Waiting for the point_head_action server to come up");
+			}
 		}
 
 		~RobotDriver(){
 			delete traj_client_;
 			delete traj_client_L;
+			delete point_head_client_;
+		}
+
+		//! Points the high-def camera frame at a point in a given frame  
+		void lookAt(double x, double y, double z)
+		{
+			//the goal message we will be sending
+			pr2_controllers_msgs::PointHeadGoal goal;
+
+			//the target point, expressed in the requested frame
+			geometry_msgs::PointStamped point;
+			point.header.frame_id = "base_link";
+			point.point.x = x; point.point.y = y; point.point.z = z;
+			goal.target = point;
+
+			//we are pointing the high-def camera frame 
+			//(pointing_axis defaults to X-axis)
+			goal.pointing_frame = "high_def_frame";
+
+			//take at least 0.5 seconds to get there
+			goal.min_duration = ros::Duration(0.75);
+
+			//and go no faster than 1 rad/s
+			goal.max_velocity = 0.75;
+
+			//send the goal
+			point_head_client_->sendGoal(goal);
+
+			//wait for it to get there (abort after 2 secs to prevent getting stuck)
+			point_head_client_->waitForResult(ros::Duration(1));
 		}
 
 	void MoveArm(float* pos, float time){
@@ -163,8 +207,20 @@ class RobotDriver{
 				base_cmd.angular.z = 0.0;
 				cmd_vel_pub_.publish(base_cmd);
 			}
+
+			if(choice[2] == 1){
+				lookAt(0.0, -10.0, 1.0);
+				ros::Duration(1.0).sleep(); // sleep
+				lookAt(0.0, -10.0, -5.0);
+				ros::Duration(1.0).sleep(); // sleep			
+				lookAt(0.0, -10.0, 1.0);
+				ros::Duration(1.0).sleep(); // sleep
+				lookAt(10000.0, 0.0, 0.0);
+				ros::Duration(1.0).sleep(); // sleep
+			}
 			cout << "Let's Dance!" << endl;
-			while(nh_.ok()){
+
+			while(nh_.ok() && (choice[1] == 1 || choice[0] == 1)){
 		
 				if(choice[1] == 1){
 
@@ -201,7 +257,7 @@ class RobotDriver{
 				if(choice[0] == 1){
 					//base_cmd.linear.x = 1.0;
 					base_cmd.angular.z = 1.0;
-					for(int i = 0; i < 50; i++){	
+					for(int i = 0; i < 20; i++){	
 						cmd_vel_pub_.publish(base_cmd);
 						ros::Duration(0.1).sleep(); // sleep
 					}
